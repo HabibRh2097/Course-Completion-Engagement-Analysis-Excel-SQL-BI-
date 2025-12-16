@@ -1,0 +1,207 @@
+/* =========================================================
+   PROJECT: Course Completion & Engagement Analysis
+   TOOL: SQL Server (SSMS)
+   PURPOSE:
+   - Clean raw course data
+   - Standardize datatypes
+   - Create analytical flags
+   - Build star schema for BI visualization
+   ========================================================= */
+
+/* =========================================================
+   1. INITIAL DATA INSPECTION
+   ========================================================= */
+
+SELECT TOP 10 *
+FROM CourseData;
+
+
+/* =========================================================
+   2. STANDARDIZE CATEGORICAL TEXT VALUES
+   ========================================================= */
+
+UPDATE CourseData
+SET
+    Gender = UPPER(LTRIM(RTRIM(Gender))),
+    Education_Level = LTRIM(RTRIM(Education_Level)),
+    Employment_Status = LTRIM(RTRIM(Employment_Status)),
+    City = LTRIM(RTRIM(City)),
+    Device_Type = LTRIM(RTRIM(Device_Type)),
+    Internet_Connection_Quality = LTRIM(RTRIM(Internet_Connection_Quality)),
+    Payment_Mode = LTRIM(RTRIM(Payment_Mode)),
+    Fee_Paid = UPPER(LTRIM(RTRIM(Fee_Paid))),
+    Discount_Used = UPPER(LTRIM(RTRIM(Discount_Used))),
+    Completed = UPPER(LTRIM(RTRIM(Completed)));
+
+
+/* =========================================================
+   3. DATE CLEANING & CONVERSION
+   ========================================================= */
+
+-- Validate date values safely
+SELECT Enrollment_Date
+FROM CourseData
+WHERE TRY_CONVERT(DATETIME, Enrollment_Date, 120) IS NULL
+  AND Enrollment_Date IS NOT NULL;
+
+-- Convert text-based dates to DATETIME
+UPDATE CourseData
+SET Enrollment_Date =
+    TRY_CONVERT(DATETIME, Enrollment_Date, 120);
+
+-- Enforce DATE datatype
+ALTER TABLE CourseData
+ALTER COLUMN Enrollment_Date DATE;
+
+
+/* =========================================================
+   4. DETECT & HANDLE IMPOSSIBLE VALUES
+   ========================================================= */
+
+SELECT *
+FROM CourseData
+WHERE
+    Age NOT BETWEEN 10 AND 90
+ OR Progress_Percentage NOT BETWEEN 0 AND 100
+ OR Video_Completion_Rate NOT BETWEEN 0 AND 100
+ OR Quiz_Score_Avg NOT BETWEEN 0 AND 100
+ OR Payment_Amount < 0;
+
+-- Cap percentage-based fields
+UPDATE CourseData
+SET Progress_Percentage = 100
+WHERE Progress_Percentage > 100;
+
+UPDATE CourseData
+SET Video_Completion_Rate = 100
+WHERE Video_Completion_Rate > 100;
+
+
+/* =========================================================
+   5. CREATE BINARY FLAGS FOR ANALYSIS
+   ========================================================= */
+
+ALTER TABLE CourseData ADD Paid_Flag BIT;
+ALTER TABLE CourseData ADD Completed_Flag BIT;
+
+UPDATE CourseData
+SET Paid_Flag =
+    CASE WHEN Fee_Paid = 'YES' THEN 1 ELSE 0 END;
+
+UPDATE CourseData
+SET Completed_Flag =
+    CASE WHEN Completed = 'COMPLETED' THEN 1 ELSE 0 END;
+
+
+/* =========================================================
+   6. CREATE DIMENSION TABLES
+   ========================================================= */
+
+-- STUDENT DIMENSION
+IF OBJECT_ID('DimStudent', 'U') IS NOT NULL DROP TABLE DimStudent;
+
+SELECT DISTINCT
+    Student_ID,
+    Name,
+    Gender,
+    Age,
+    Education_Level,
+    Employment_Status,
+    City
+INTO DimStudent
+FROM CourseData;
+
+
+-- COURSE DIMENSION
+IF OBJECT_ID('DimCourse', 'U') IS NOT NULL DROP TABLE DimCourse;
+
+SELECT DISTINCT
+    Course_ID,
+    Course_Name,
+    Category,
+    Course_Level,
+    Course_Duration_Days,
+    Instructor_Rating
+INTO DimCourse
+FROM CourseData;
+
+
+-- PLATFORM DIMENSION
+IF OBJECT_ID('DimPlatform', 'U') IS NOT NULL DROP TABLE DimPlatform;
+
+SELECT DISTINCT
+    Device_Type,
+    Internet_Connection_Quality
+INTO DimPlatform
+FROM CourseData;
+
+
+/* =========================================================
+   7. CREATE FACT TABLE
+   ========================================================= */
+
+IF OBJECT_ID('FactCourseEngagement', 'U') IS NOT NULL
+    DROP TABLE FactCourseEngagement;
+
+SELECT
+    Student_ID,
+    Course_ID,
+    Enrollment_Date,
+    Login_Frequency,
+    Average_Session_Duration_Min,
+    Video_Completion_Rate,
+    Discussion_Participation,
+    Time_Spent_Hours,
+    Days_Since_Last_Login,
+    Notifications_Checked,
+    Peer_Interaction_Score,
+    Assignments_Submitted,
+    Assignments_Missed,
+    Quiz_Attempts,
+    Quiz_Score_Avg,
+    Project_Grade,
+    Progress_Percentage,
+    Rewatch_Count,
+    Paid_Flag,
+    Completed_Flag,
+    Payment_Amount,
+    Satisfaction_Rating
+INTO FactCourseEngagement
+FROM CourseData;
+
+
+/* =========================================================
+   8. CREATE CALCULATED ANALYTICAL FIELDS
+   ========================================================= */
+
+ALTER TABLE FactCourseEngagement
+ADD Engagement_Score AS
+(
+    (Progress_Percentage * 0.4)
+  + (Video_Completion_Rate * 0.3)
+  + (Quiz_Score_Avg * 0.3)
+);
+
+ALTER TABLE FactCourseEngagement
+ADD Inactive_Flag AS
+(
+    CASE WHEN Days_Since_Last_Login > 14 THEN 1 ELSE 0 END
+);
+
+
+/* =========================================================
+   9. FINAL VALIDATION QUERIES
+   ========================================================= */
+
+SELECT COUNT(*) AS Student_Count FROM DimStudent;
+SELECT COUNT(*) AS Course_Count FROM DimCourse;
+SELECT COUNT(*) AS Engagement_Records FROM FactCourseEngagement;
+
+SELECT
+    AVG(Progress_Percentage) AS Avg_Progress,
+    AVG(Video_Completion_Rate) AS Avg_Video_Completion,
+    AVG(Quiz_Score_Avg) AS Avg_Quiz_Score,
+    AVG(Engagement_Score) AS Avg_Engagement
+FROM FactCourseEngagement;
+
+
