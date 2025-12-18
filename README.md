@@ -145,6 +145,63 @@ Dimensional modeling (fact & dimension tables)
 
 KPI engineering for dashboards
 
+
+
+**Student Engagement Analytics Dashboard**
+The dashboard provides insights into student engagement, course performance, completion rates, inactivity risk, and payment behavior, supporting data-driven decision-making for online education platforms.
+
+Dashboard Features
+
+KPI cards:
+
+Completion Rate
+
+Total Students
+
+Average Engagement Score
+
+Inactivity Rate
+
+Course analytics:
+
+Completion Rate by Category
+
+Engagement by Course
+
+Quiz Performance by Course Level
+
+Student behavior insights:
+
+Days Since Last Login distribution
+
+Engagement by Education Level
+
+Monetization insights:
+
+Paid vs Free student distribution
+
+Interactive slicers:
+
+Course Category
+
+Course Level
+
+City
+
+Enrollment Date
+
+Education Level
+
+
+
+
+
+
+
+
+
+
+
 Analytics storytelling
 
 
